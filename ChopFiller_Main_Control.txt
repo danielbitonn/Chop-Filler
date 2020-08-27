@@ -1,0 +1,572 @@
+#include "myStepperMotors.h"
+#include "TimerOne.h"
+#include <Stepper.h>
+#define Sensfreq 10.0 //[1/sec]/
+#define PIDfreq  10.0 //[1/sec]/
+
+
+/*
+ * PREV_SPEED=map(PID,0,255,MAX_SPEED,MIN_SPEED);
+ * if(PREV_SPEED!=SPEED){SPEED=PREV_SPEED;} 
+ */ 
+
+#define MinTargetVal 20.00
+#define MaxTargetVal 200.00
+/*Execute PID*/  
+#define MIN_SPEED 550
+#define MAX_SPEED 800
+#define Raw_Min 600
+#define Raw_Max 1600
+#define Qmin 65.00
+#define Qmax 95.00
+#define Kp_Min 100.0 //Because i Need more Energy for Smaller Mtv Between 10g-500g
+#define Kp_Max 120.0
+//#define PI_FACTOR 5.0
+#define Ki_Min  5.0
+#define Ki_Max  50.0
+#define SUM_MAX 0.0 //Define the Cofficient to calc The Max Val For I operator 
+#define Kd_Min 1.0
+#define Kd_Max 50.0
+//#define KDD_FACTOR 0.05
+
+//#define DT 250    //250ms >>>0.25sec
+
+//Initalize Percent When MSM Stop Working and only SSM is Working
+#define Qr 90.0           /*UnUS*/
+
+#define BAUDRATE 1000000   //Serial Protocol
+#define DATA_FRAME 50     //Data Read Str long
+#define WHITE 31
+#define RED 33
+#define LDR A2
+#define DC 3  
+#define STOP_CON 25
+#define CON_COFF 1
+#define CLK 2        
+#define DAT 22 
+
+//#define MSM_STEPS 515              /*UnUS*/
+//#define SSM_STEPS 515              /*UnUS*/
+//Stepper msm(MSM_STEPS,8,9,10,11);  /*UnUS*/
+//Stepper ssm(SSM_STEPS,4,5,6,7);    /*UnUS*/
+//int                                /*UnUS*/
+//MSM_prev=MSM_STEPS/2,
+//SSM_prev=SSM_STEPS/2,
+//M_PID=0,
+//S_PID=0;
+
+//double /*8Byte*/
+//Mtv,
+//M;
+
+
+#define SendInherenDataArray 20
+#define AmountOfSampels 40
+#define Len_InherenticDataArray 23
+
+double dataStorage [AmountOfSampels][Len_InherenticDataArray]={0.00,0.00};
+long long int Tstart=0,Treading=0;
+
+
+char /*1Byte*/
+ReadDataStr[DATA_FRAME],
+buff[DATA_FRAME+10];
+
+int /*2Byte*/
+flag=0,
+tick=0,
+COUNT=0,
+PREV_COUNT=0,
+Current_CLK,
+Last_CLK,
+routineFlag=0, 
+bytesRead,
+state=0,
+prev_state=0,
+SPEED=30000,
+PREV_SPEED=0,
+int_M=0,
+int_Mtv=0,
+prev_int_Mtv=0,
+BOX_M0=0,
+ServingsCounter=1,
+MSM_stepCounter=0,
+SSM_stepCounter=0,
+ldr=0,
+Per=0,
+flagCon=0,
+raw=0;
+double 
+dP,
+dI=0.0,
+dD,
+dPID,
+dsum=0,
+dsum_max,
+ReadingDT=1000.0/Sensfreq,
+DT=1000.0/PIDfreq;
+float /*4Byte*/
+calc,
+Q,
+kp,
+ki,
+kd,
+kdd,
+error=0.0,
+prev_error=0.0,
+prev_error2=10.0,
+dt=DT/1000.0,
+raw_factor=0.00;
+
+
+//long int /*4Bytes*/
+//P,
+//I=0,
+//D,
+//PID,
+//sum=0,
+//sum_max;
+
+
+/**************************************   Printing Usefull   ********************************************/
+/********************************************************************************************************/
+void PRINTINGFUNC(int i){
+  switch (i)
+  {
+    case 50:
+    Serial.print("@Q is: "); Serial.println(Q);
+     Serial.print("@Calc Operator is: "); Serial.println(calc);
+     Serial.print("@Per Operator is: "); Serial.println(Per);
+       Serial.print("@M Is Operator is: "); Serial.println(int_M);
+           Serial.print("@State Is Operator is: "); Serial.println(state);
+
+    break;
+    case 0:
+          Serial.print("@Q is: "); Serial.println(Q);                                
+          Serial.print("@Kp is: "); Serial.println(kp);
+          Serial.print("@Ki is: "); Serial.println(ki);
+          Serial.print("@Kdd is: "); Serial.println(kdd);
+          Serial.print("@Kd is: "); Serial.println(kd);
+          Serial.print("@RAW is: "); Serial.println(raw);   
+    break;
+
+    case 1:
+  //Serial.print("@P Operator is: "); Serial.println(dP);
+  //        Serial.print("@I Operator is: "); Serial.println(dI);
+   //       Serial.print("@sum Operator is: "); Serial.println(dsum);
+   //       Serial.print("@D Operator is: "); Serial.println(dD);
+    //      Serial.print("@Kd Operator is: "); Serial.println(kd);
+     //     Serial.print("@PID Operator is: "); Serial.println(dPID);
+      //    Serial.print("@SPEED is: "); Serial.println(SPEED);
+          Serial.print("@Calc Operator is: "); Serial.println(calc);
+          Serial.print("@Per Operator is: "); Serial.println(Per);
+          Serial.print("@Per Operator is: "); Serial.println(int_M);
+          Serial.println("@@@@@@@@@@@@@@@@");
+    break;
+    
+    case 2:
+          Serial.print("@prev_error is: "); Serial.println(prev_error);
+          Serial.print("@error is: "); Serial.println(error);
+    break;
+    case 3:
+          Serial.println(ldr);
+    break;
+    case 4:
+          Serial.print("@@@"); Serial.println(ReadDataStr);
+    break;
+    case 5:
+          Serial.print("@"); Serial.println(COUNT);
+    break;
+    case 6:
+          sprintf(buff,"State %d is Running, TargeVal is: %d",state,int_Mtv);
+          Serial.println(buff);
+    break;
+    case 10:
+          Serial.println("$: ");
+          Serial.print(state); Serial.print(", ");
+          Serial.print(int_Mtv); Serial.print(", ");
+          Serial.print(Q); Serial.print(", ");
+          Serial.print(kp); Serial.print(", ");
+          Serial.print(ki); Serial.print(", ");
+          Serial.print(kd); Serial.print(", ");
+          Serial.print(BOX_M0); Serial.print(", ");
+    break;
+    case 20: /*SendInherenDataArray*/
+          dataStorage [tick][0]=raw;
+          dataStorage [tick][1]=int_Mtv;
+          dataStorage [tick][2]=Q;
+          dataStorage [tick][3]=kp;
+          dataStorage [tick][4]=ki;
+          dataStorage [tick][5]=kd;
+          dataStorage [tick][6]=BOX_M0;
+          dataStorage [tick][7]=int_M;
+          dataStorage [tick][8]=Per;
+          dataStorage [tick][9]=error;
+          dataStorage [tick][10]=dP;
+          dataStorage [tick][11]=dsum_max;
+          dataStorage [tick][12]=dI;
+          dataStorage [tick][13]=dD;
+          dataStorage [tick][14]=dPID;
+          dataStorage [tick][15]=SPEED;
+          dataStorage [tick][16]=MSM_stepCounter;
+          dataStorage [tick][17]=SSM_stepCounter;
+          dataStorage [tick][18]=tick;
+          dataStorage [tick][19]=Tstart;  
+          dataStorage [tick][20]=millis()-Treading;  
+          dataStorage [tick][21]=raw_factor;
+          dataStorage [tick][22]=state;
+          tick++;    
+          if(tick==AmountOfSampels){tick=0;}
+    break;
+    case 21:
+          dataStorage [tick][0]=raw;
+          dataStorage [tick][1]=int_Mtv;
+          dataStorage [tick][2]=Q;
+          dataStorage [tick][3]=kp;
+          dataStorage [tick][4]=ki;
+          dataStorage [tick][5]=kd;
+          dataStorage [tick][6]=BOX_M0;
+          dataStorage [tick][7]=int_M;
+          dataStorage [tick][8]=Per;
+          dataStorage [tick][9]=error;
+          dataStorage [tick][10]=dP;
+          dataStorage [tick][11]=dsum_max;
+          dataStorage [tick][12]=dI;
+          dataStorage [tick][13]=dD;
+          dataStorage [tick][14]=dPID;
+          dataStorage [tick][15]=SPEED;
+          dataStorage [tick][16]=MSM_stepCounter;
+          dataStorage [tick][17]=SSM_stepCounter;
+          dataStorage [tick][18]=tick;  
+          dataStorage [tick][19]=Tstart;  
+          dataStorage [tick][20]=Treading;  
+          dataStorage [tick][21]=raw_factor;
+          dataStorage [tick][22]=state;
+    break;
+    }
+ }
+  
+/**************************************   Rotrary Librery   *********************************************/
+/********************************************************************************************************/
+void RotaryDefine()
+{
+  pinMode(CLK,INPUT);
+  pinMode(DAT,INPUT);
+  Last_CLK = digitalRead(CLK);
+  attachInterrupt(0, RoteStateChanged, CHANGE);
+  attachInterrupt(1, RoteStateChanged, CHANGE);
+}
+
+void OldFunc()
+{
+ /*this all can go to the loop !!!*/
+  /*********************************/
+  //calc=((float)int_M/(float)int_Mtv)*100.0; /*Why to Calculate ?? maybe Just Send it*/
+  //PRINTINGFUNC(1);
+  
+  //if(calc<=Q)         {state=1;}
+  //else if(calc==100.0){state=0; prev_state=2; MotorOff(1); MotorOff(2);}
+  //else if(calc<101.0) {state=2;}
+  //else if(calc>=101.0){state=0; prev_state=2; MotorOff(1); MotorOff(2);}
+  /*untill here!!!!*/
+ /*********************************/ 
+}
+
+/*****************************************   PID   ******************************************************/
+/********************************************************************************************************/
+void PID_Func()
+{
+  error=(double)(int_Mtv-int_M);
+  
+  /*Proportional Factor*/   dP=kp*error;
+                              
+  /*Integral Factor*/       dsum_max=SUM_MAX/(ki*dt);
+                            dI += ki * error * dt;
+                            if(dI>dsum_max){dI=dsum_max;}
+ 
+  //PRINTINGFUNC(2);
+                            
+  /*Diffrential Factor*/    dD=(kd*(error-prev_error))/dt;   
+                            if(prev_error==error){flag=0; return;}  
+                               else {flag=1; prev_error=error;}
+                            
+  /*PID Controller Val*/    dPID=dP+dI+dD;  
+                            if(dPID>255.00){dPID=255.00;} 
+                              else if(dPID<0.0){dPID=0.00;}
+  
+  /*Execute PID*/           PREV_SPEED=map((int)dPID,0,255,MAX_SPEED,MIN_SPEED);
+                            if(PREV_SPEED!=SPEED){SPEED=PREV_SPEED;}
+
+  //PRINTINGFUNC(SendInherenDataArray);
+
+  //OldFunc(); /*UU Moved to the beggining Of Loop*/
+ PRINTINGFUNC(1);
+ }
+ double coerceFunc(double in, double mini, double maxi)
+ {
+   if (in >= maxi)
+   return maxi;
+  else if (in <= mini)
+    return mini;
+  else
+    return in;
+ }
+void PID_Parameters_Calc()
+{
+  raw_factor=(double)map(raw,Raw_Min,Raw_Max,10,1);
+  raw_factor=coerceFunc(raw_factor,Raw_Min,Raw_Max);
+  raw_factor=raw_factor/100.0;                      /*Between 0.01 To 1.0*/
+  
+  kp=(double)map(int_Mtv,MinTargetVal,MaxTargetVal,Kp_Max,Kp_Min);
+  kp=coerceFunc(kp,Kp_Min,Kp_Max);
+  kp=kp*raw_factor;
+  //ki=PI_FACTOR*kp;
+  
+  
+  ki=(double)map(int_Mtv,MinTargetVal,MaxTargetVal,Ki_Min,Ki_Max);
+  ki=coerceFunc(ki,Ki_Min,Ki_Max);
+  ki=ki*raw_factor;
+  
+  kd=(double)map(int_Mtv,MinTargetVal,MaxTargetVal,Kd_Max,Kd_Min);
+  kd=coerceFunc(kd,Kd_Min,Kd_Max);
+  kd=kd*raw_factor;
+  
+  Q=(double)map(int_Mtv,MinTargetVal,MaxTargetVal,Qmin,Qmax);
+  Q=coerceFunc(Q,Qmin,Qmax);
+  //kdd=kd*KDD_FACTOR;
+  
+  PRINTINGFUNC(0);
+ }
+
+/************************************   ReadingFunc    **************************************************/
+/********************************************************************************************************/
+void ReadFunc(int data)
+{
+  switch (data)
+  {
+/*  '>' */  case 0: sscanf(ReadDataStr, ">%d,%d,%d", &state,&int_Mtv,&raw);  
+                    ////Serial.println(String("@state Is:") + " " + state + " | " + String("int_Mtv Is:") + " " + int_Mtv);
+                    ////if(prev_state!=state){if(prev_int_Mtv==int_Mtv){routineFlag=1;}else{routineFlag=0; prev_int_Mtv=int_Mtv;}
+                    /* prev_state=state;*/ /*PRINTINGFUNC(6);*//*}*/        break;  //Starter
+
+/*  '#' */  case 1: sscanf(ReadDataStr, "#%d,%d", &int_M,&Per);
+/*Receiving "M"*/   //if(state!=0){PID_Func();}
+/*indication*/                                                  break; 
+                    
+/*  'B' */  case 2: sscanf(ReadDataStr, "BOX_M0>>>%d", &BOX_M0);
+/*Getting Box's Weight While Tare The Scale*/
+                    //if(routineFlag==0){}
+                    PID_Parameters_Calc();
+                    Serial.print("Box's Weight is: "); Serial.println(BOX_M0); 
+                                                                            break; 
+ }
+}
+
+/*************************************   ISR_READING    *************************************************/
+/********************************************************************************************************/
+void ISR_READING()
+{
+//  Timer1.detachInterrupt();  // Stop the timer
+// if (Serial.available() > 1)
+//      {
+//        bytesRead = Serial.readBytesUntil('\0', ReadDataStr, DATA_FRAME);
+//        if (bytesRead > 1) {
+//                            ReadDataStr[bytesRead] = '\0';
+//                            //PRINTINGFUNC(4);
+//                            if(ReadDataStr[0]=='#')     {ReadFunc(1);}  //MEASURED: Weight Reading
+//                            else if(ReadDataStr[0]=='>'){ReadFunc(0);}  //ACTIVATE: STATE & TargetVal Mass
+//                            else if(ReadDataStr[0]=='B'){ReadFunc(2);}  //TARE:     BOX_M0 -> Box's Weight
+//                           }
+//       }
+//Timer1.attachInterrupt( ISR_READING );  // Enable the timer
+}
+
+ void SendInherenticDataFunc()
+{
+  //Serial.println("$InherenticDataArray:");
+  PRINTINGFUNC(SendInherenDataArray);
+  for(int k=0;k<tick/*AmountOfSampels*/;k++)/*Running On arr[___][ ]*/
+      {
+        Serial.print("$:");
+        for(int j=0;j<=Len_InherenticDataArray;j++)/*Running On arr[ ][___]*/
+            {
+             Serial.print(dataStorage[k][j]); Serial.print(",");
+            }
+         Serial.println("EndLine");
+      }
+  }
+
+
+void initializeMachineFunc (int option)
+{
+  switch (option)
+                {
+                  case 2:
+                  BOX_M0=0;
+                  
+                  MSM_stepCounter=SSM_stepCounter=COUNT=0;
+                  error=prev_error=0.0;
+                  calc=Per=0.00;
+                  SPEED=30000;
+                  PREV_SPEED=0;
+                  tick=0;
+                  Tstart=0;
+                  dP=0.00;
+                  dI=0.00;
+                  dD=0.00;
+                  dPID=0.00;
+                
+                  break;
+                }
+}  
+
+void sendDataFunc(int option)
+{
+char dataStr[200];
+switch (option)
+              {
+              /*FINAL FEEDING*/
+              case (2):
+              //PRINTINGFUNC(0);
+/*End signal To CVI*/ sprintf(dataStr,"Finaly %d Serving, %d[step], %d[step], %d[g], %d[Encoder], kp %d, ki %d, kdd %d, Q %d",  
+                      ServingsCounter,MSM_stepCounter,SSM_stepCounter,(int)error,COUNT,(int)kp,(int)ki,(int)kdd,(int)Q);
+                      Serial.println(dataStr);
+                      delay(10);
+/*Full Feeding data*/ SendInherenticDataFunc();
+                      ServingsCounter++;
+               break;
+              
+              case(4):
+                sprintf(dataStr,"Conveyor Is Finish");
+                Serial.println(dataStr);
+                flagCon=0;
+              break;
+              }
+ initializeMachineFunc (option);  
+}
+
+
+/********************************************************************************************************/
+/********************************************************************************************************/
+/****************************************/   void setup()    /*******************************************/
+{
+  Serial.begin(BAUDRATE);
+  while (!Serial) { ; /* Waiting for serial port to connect. Needed for native USB port only*/} 
+  Serial.println("Welcome To ChoopFiller:");
+  pinMode(WHITE,OUTPUT);  digitalWrite(WHITE,LOW);
+  pinMode(RED,OUTPUT);    digitalWrite(RED,LOW);
+  pinMode(DC,OUTPUT);     digitalWrite(DC,LOW);
+  stepper_motor_define();
+  RotaryDefine();
+/*
+ state=10;
+ int_Mtv=8;
+ Serial.println(String("state") + " " + state + "|" + String("int_Mtv") + " " + int_Mtv); 
+ stae 10|int_Mtv 8
+*/
+   
+  //Timer1.initialize(20000000*DELTA_TIME); // set timer for iterrupt by (delayMicroseconds())
+  //Timer1.attachInterrupt(ISR_READING); // Enable the timer
+}
+
+
+/********************************************************************************************************/
+/********************************************************************************************************/
+/***************************************/   void loop()     /********************************************/
+{    
+
+if(millis()- Treading>=ReadingDT)
+{
+ while(Serial.available())
+ {
+  bytesRead = Serial.readBytesUntil('\0', ReadDataStr, DATA_FRAME);
+  if (bytesRead <1){continue;}
+    else {                 ReadDataStr[bytesRead] = '\0';
+                            //PRINTINGFUNC(4);
+                            if(ReadDataStr[0]=='#')     {ReadFunc(1);}  //MEASURED: Weight Reading
+                            else if(ReadDataStr[0]=='>'){ReadFunc(0);}  //ACTIVATE: STATE & TargetVal Mass
+                            else if(ReadDataStr[0]=='B'){ReadFunc(2);}  //TARE:     BOX_M0 -> Box's Weight
+                     }
+  //PRINTINGFUNC(0);
+  Treading=millis();
+  }
+}
+  
+ if(BOX_M0==0){Tstart=millis();}
+  else if(/*state!=0 && state!=4 &&*/ BOX_M0!=0)
+    {
+    calc=Per;
+    if(millis()-Tstart>=DT && flag!=0){PRINTINGFUNC(SendInherenDataArray); Tstart=millis();}
+    if(calc<=Q)         {state=1; PID_Func();}
+      else if(calc<100.0) {state=2; PID_Func();}
+        else if(calc>=100.0){MotorOff(1); MotorOff(2); state=0;}
+       PRINTINGFUNC(50);
+
+           }
+  switch (state)
+              {
+              case 0: 
+                      MotorOff(1); /*SSM*/      MotorOff(2); /*MSM*/
+                      if(calc>=100.0){sendDataFunc(2);} else if(flagCon){sendDataFunc(4);}
+                      MotorOff(1); /*SSM*/      MotorOff(2); /*MSM*/
+                     
+                                                                                     break;
+                                                                                                                                            //BOTH >>> SPEED:800 < RPM > SPEED:4000
+               case 1:     
+                     BOTH_SLOW(SPEED);   MSM_stepCounter++;    SSM_stepCounter++;
+                                                                                      break;
+            
+                case 2:
+                      MotorOff(1);      SSM_clockwise(SPEED+50);   SSM_stepCounter++; 
+                                                                                      break;
+                case 4:
+                      ldr=analogRead(LDR); delay(10); //Serial.print(ldr);
+                      if(ldr>=STOP_CON*CON_COFF) { digitalWrite(DC,HIGH);                     }
+                        else            { digitalWrite(DC,LOW);   state=0; flagCon=1;}
+                                                                                      break;
+     }/*End Of Switch*/
+
+}/*End Of Loop*/
+
+/*------------------------------------------------------------------------------------------------*/
+
+void RoteStateChanged()
+{
+ Current_CLK=digitalRead(CLK);
+ if (Current_CLK != Last_CLK  && Current_CLK == 1)
+    {
+    if (digitalRead(DAT) != Current_CLK) {COUNT ++;}
+    //PRINTINGFUNC(5);
+    }
+ Last_CLK = Current_CLK;
+}
+
+
+/*------------------------------------------------------------------------------------------------*/
+
+/*
+case 5:
+msm.setSpeed(SPEED/800); //  0 - 50 RPM Value 
+ssm.setSpeed(SPEED/50); //  0 - 50 RPM Value
+MSM_prev=M_PID; MSM_prev=S_PID;
+break;
+case 6:
+msm.step(MSM_STEPS);
+ssm.step(SSM_STEPS);
+MSM_prev=M_PID; MSM_prev=S_PID;
+break;
+case 7:
+msm.step(M_PID-MSM_prev);
+ssm.step(S_PID-SSM_prev);
+MSM_prev=M_PID; MSM_prev=S_PID;
+break;
+*/
+/*Moving FORWARD With Short Code*/
+/*
+case 8:
+for (int i=0; i<=360; i++){MSM_clockwise(SPEED); }
+break;
+*/
+ 
+
+ 

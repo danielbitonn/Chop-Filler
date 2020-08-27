@@ -1,0 +1,138 @@
+/********************************************************************************************************/
+/**************************************   Stepper Motors Define   ***************************************/
+/********************************************************************************************************/
+//>>>Motor speed between 800-4000. small number is bigger speed
+
+void stepper_motor_define()
+{
+ /*SSM*/
+ pinMode(4, OUTPUT); 
+ pinMode(5, OUTPUT); 
+ pinMode(6, OUTPUT); 
+ pinMode(7, OUTPUT);
+
+ /*MSM*/
+ pinMode(8, OUTPUT); 
+ pinMode(9, OUTPUT); 
+ pinMode(10, OUTPUT); 
+ pinMode(11, OUTPUT); 
+  
+ }
+
+/********************************      Turn Off Motor            ********************************************/
+void MotorOff(int motor)  //SSM=2 || MSM =1
+{
+  switch (motor)
+{
+  case 1:
+  digitalWrite(4, LOW); 
+  digitalWrite(5, LOW); 
+  digitalWrite(6, LOW); 
+  digitalWrite(7, LOW);
+  break;
+
+  case 2:
+  digitalWrite(8, LOW); 
+  digitalWrite(9, LOW); 
+  digitalWrite(10, LOW); 
+  digitalWrite(11, LOW);
+  break;
+}
+}
+
+int lookup[8] = {B01000, B01100, B00100, B00110, B00010, B00011, B00001, B01001};
+
+void MSM_clockwise(int MOTOR_SPEED)
+{ for(int i = 7; i >= 0; i--){
+    digitalWrite(4, bitRead(lookup[i], 3));  digitalWrite(5, bitRead(lookup[i], 2));
+    digitalWrite(6, bitRead(lookup[i], 1)); digitalWrite(7, bitRead(lookup[i], 0));
+    delayMicroseconds(MOTOR_SPEED);}
+}
+
+void SSM_clockwise(int MOTOR_SPEED)
+{
+  for(int i = 7; i >= 0; i--){
+    digitalWrite(8, bitRead(lookup[i], 0));  digitalWrite(9, bitRead(lookup[i], 1));
+    digitalWrite(10, bitRead(lookup[i], 2));  digitalWrite(11, bitRead(lookup[i], 3));
+    delayMicroseconds(MOTOR_SPEED);}
+}
+
+void BOTH_SLOW(int MOTOR_SPEED)
+{ 
+ for(int i = 7; i >= 0; i--){
+    digitalWrite(4, bitRead(lookup[i], 3)); digitalWrite(5, bitRead(lookup[i], 2));
+    digitalWrite(6, bitRead(lookup[i], 1)); digitalWrite(7, bitRead(lookup[i], 0));
+    delayMicroseconds(MOTOR_SPEED+265);
+    digitalWrite(8, bitRead(lookup[i], 0)); digitalWrite(9, bitRead(lookup[i], 1));
+    digitalWrite(10, bitRead(lookup[i], 2));  digitalWrite(11, bitRead(lookup[i], 3));
+    /*delayMicroseconds(MOTOR_SPEED-300);*/}
+}
+
+void BOTH_FAST(int MOTOR_SPEED)
+{ 
+ for(int i = 7; i >= 0; i--){
+   digitalWrite(8, bitRead(lookup[i], 0));  digitalWrite(4, bitRead(lookup[i], 3));
+   digitalWrite(9, bitRead(lookup[i], 1));  digitalWrite(5, bitRead(lookup[i], 2));
+   digitalWrite(10, bitRead(lookup[i], 2)); digitalWrite(6, bitRead(lookup[i], 1));
+   digitalWrite(11, bitRead(lookup[i], 3)); digitalWrite(7, bitRead(lookup[i], 0));
+   delayMicroseconds(MOTOR_SPEED);}
+}
+
+/********************************   Function to move 1 step BACK  ********************************************/
+void MotorBack(int s1,int s2,int s3,int s4,int MOTOR_SPEED)
+{ 
+  digitalWrite(s1, HIGH);   digitalWrite(s2, LOW);   digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, HIGH);   digitalWrite(s2, HIGH);  digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);    digitalWrite(s2, HIGH);  digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);    digitalWrite(s2, HIGH);  digitalWrite(s3, HIGH);  digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);    digitalWrite(s2, LOW);   digitalWrite(s3, HIGH);  digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);    digitalWrite(s2, LOW);   digitalWrite(s3, HIGH);  digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);    digitalWrite(s2, LOW);   digitalWrite(s3, LOW);   digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, HIGH);   digitalWrite(s2, LOW);   digitalWrite(s3, LOW);   digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+}
+
+/********************************   Function to move 1 step FORWARD  ********************************************/
+void MotorForward(int s1,int s2,int s3,int s4,int MOTOR_SPEED)
+{
+  digitalWrite(s1, HIGH);   digitalWrite(s2, LOW);   digitalWrite(s3, LOW);   digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);   digitalWrite(s2, LOW);    digitalWrite(s3, LOW);   digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);   digitalWrite(s2, LOW);    digitalWrite(s3, HIGH);  digitalWrite(s4, HIGH); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);   digitalWrite(s2, LOW);    digitalWrite(s3, HIGH);  digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);   digitalWrite(s2, HIGH);   digitalWrite(s3, HIGH);  digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, LOW);   digitalWrite(s2, HIGH);   digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, HIGH);  digitalWrite(s2, HIGH);   digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+  digitalWrite(s1, HIGH);  digitalWrite(s2, LOW);    digitalWrite(s3, LOW);   digitalWrite(s4, LOW); 
+  delayMicroseconds(MOTOR_SPEED);
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/*
+//not necessary
+const int MSM1 = 8;   // Blue   - 28BYJ48 pin 1
+const int MSM2 = 9;   // white  - 28BYJ48 pin 2
+const int MSM3 = 10;  // Yellow - 28BYJ48 pin 3
+const int MSM4 = 11;  // Orange - 28BYJ48 pin 4
+                      // Red    - 28BYJ48 pin 5 (VCC)
+
+const int SSM1 = 4;   // Purple - 28BYJ48 pin 1
+const int SSM2 = 5;   // green  - 28BYJ48 pin 2
+const int SSM3 = 6;   // gray   - 28BYJ48 pin 3
+const int SSM4 = 7;   // brown  - 28BYJ48 pin 4
+                      // Red    - 28BYJ48 pin 5 (VCC)
+*/

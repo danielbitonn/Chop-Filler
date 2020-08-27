@@ -1,0 +1,69 @@
+#include <Servo.h>
+#define BAUDRATE 9600
+#define DATA_FRAME 50
+#define MSM_PIN 9
+#define SSM_PIN 10
+#define M_Q0 65
+#define S_Q0 10
+#define M_QMin  35
+#define M_QMax  65
+#define S_QMin  10
+#define S_QMax  40
+Servo MSM;  // Main Servo Motor
+Servo SSM;  // Sub Servo Motor
+int weight_val,state;
+int q1,q2;
+int bytesRead;
+char ReadDataStr[DATA_FRAME];
+
+void setup() {
+  Serial.begin(BAUDRATE);
+   while (!Serial) { ; /* Waiting for serial port to connect. Needed for native USB port only*/}
+  Serial.println("Welcome To ChoopFiller");
+  MSM.attach(MSM_PIN);
+  SSM.attach(SSM_PIN);
+  MSM.write(M_Q0);
+  SSM.write(S_Q0);  
+}
+
+void loop() {
+ 
+ while (Serial.available() > 0)
+      {
+        bytesRead = Serial.readBytesUntil('\0', ReadDataStr, DATA_FRAME);
+        if (bytesRead < 1) continue;
+        ReadDataStr[bytesRead] = '\0';
+        sscanf(ReadDataStr, "%d,%d",&state,&val);
+      }   
+ 
+  PID(weight_val);
+  switch (state)
+  {
+    case 0;
+    SSM.write(M_Q0);
+    SSM.write(S_Q0);
+    break;
+    
+    case 1:
+    MSM.write(q1);
+    SSM.write(q2);
+    break;
+    
+    case 2:
+    MSM.write(M_Q0);
+    SSM.write(q2);
+    break;
+    
+    case 3:
+   
+   
+   break;
+ 
+    }
+  if(state==1){MSM.write(q1);}else if(state==2){SSM.write(valq2);}
+  
+   
+  
+  //delay(100);                      
+
+}
